@@ -10,7 +10,9 @@ import DW.Basics
 import DW.Sections
 
 string :: Get ByteString
-string = getBytes =<< lookAhead (findZero 0)
+string = do bs <- getBytes =<< lookAhead (findZero 0)
+            _  <- word8 -- skip the 0 terminator
+            return bs
   where
   findZero !n = do b <- word8
                    if b == 0 then return n else findZero (n + 1)

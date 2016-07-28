@@ -1,18 +1,49 @@
 {-# LANGUAGE RecordWildCards #-}
-module DW.Section.ARanges (Entry(..), aranges) where
+module DW.Section.ARanges
+  ( findUnsegmentedAddr
+  , FindAddress(..)
+  , Entry(..)
+  , aranges
+  , ARanges(..)
+  ) where
 
 import           Data.Serialize.Get(Get,runGet,skip)
 import           Data.Word
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import           Control.Applicative(many)
+import           Control.Monad(msum)
 
 import DW.Basics
 import DW.Sections
 
+class FindAddress t where
+  findAddress :: t -> Integer -> Integer -> Maybe Word64
 
-aranges :: Sections -> Either String [([Entry], Word64)]
-aranges secs = runGet (entrySets (secEndian secs))
+instance FindAddress ARanges where
+  findAddress (ARanges es) seg addr = msum (map check es)
+    where
+    inRange Entry { .. } = seg == segment &&
+                           addr >= address &&
+                           addr < address + size
+    check (e,w)          = if any inRange e then Just w else Nothing
+
+
+instance FindAddress Sections where
+  findAddress secs seg addr =
+    case aranges secs of
+      Left _   -> Nothing
+      Right as -> findAddress as seg addr
+
+findUnsegmentedAddr :: FindAddress t => t -> Integer -> Maybe Word64
+findUnsegmentedAddr sec addr = findAddress sec 0 addr
+
+newtype ARanges = ARanges [([Entry], Word64)]
+                    deriving Show
+
+aranges :: Sections -> Either String ARanges
+aranges secs = fmap ARanges
+             $ runGet (entrySets (secEndian secs))
              $ sectionBytes ".debug_aranges" secs
 
 entrySets :: Endian -> Get [ ([Entry], Word64) ]

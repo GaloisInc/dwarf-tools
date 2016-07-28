@@ -26,10 +26,13 @@ data DIE = DIE
   , dieChildren   :: [DIE]
   } deriving Show
 
+lookupAT :: AT -> DIE -> Maybe AttributeValue
+lookupAT a d = lookup a (dieAttributes d)
+
+
 data AttributeValue =
     Address   !Integer
   | Block     !ByteString
-  | Constant  !ByteString
   | Number    !Integer
   | ExprLoc   !ByteString
   | Flag      !Bool

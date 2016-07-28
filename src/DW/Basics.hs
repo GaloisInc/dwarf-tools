@@ -53,17 +53,20 @@ leb128 = go 0 0
                  signBit `seq` newRes `seq` return (signBit,newRes)
 
 
+uleb_from_leb :: (Int,Integer) -> Integer
+uleb_from_leb = snd
+
+sleb_from_leb :: (Int,Integer) -> Integer
+sleb_from_leb (sign,w)
+  | testBit w sign  = fromIntegral w .|. negate (shiftL 1 sign)
+  | otherwise       = w
+
+
 uleb128 :: Get Integer
-uleb128 = fmap snd leb128
+uleb128 = fmap uleb_from_leb leb128
 
 sleb128 :: Get Integer
-sleb128 = do (sign,w) <- leb128
-             let w' = fromIntegral w
-             if testBit w' sign
-               then return (fromIntegral w .|. negate (shiftL 1 sign))
-               else return w'
-
-
+sleb128 = fmap sleb_from_leb leb128
 
 initialLength :: Endian -> Get (DwarfFormat, Word64)
 initialLength chunkEndian =

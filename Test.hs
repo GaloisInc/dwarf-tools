@@ -7,19 +7,24 @@ import System.Environment
 import qualified Data.Serialize as S
 import Text.Show.Pretty-- (pPrint,ppShow)
 import Hexdump
+import Text.Read(readMaybe)
 
 -- import Dwarf
 
 import DW.Basics hiding (prettyHex)
+import DW.DIE
+import DW.AT
 import DW.Sections
 import DW.Section.Abbrev
 import DW.Section.Info
 import DW.Section.ARanges
+import qualified DW.Section.Line as L
 
 
 main :: IO ()
 main =
-  do let a = "/home/diatchki/src/galua/galua-c/inplace/bin/galua-dbg"
+  do args <- getArgs
+     let a = "/home/diatchki/src/galua/galua-c/inplace/bin/galua-dbg"
      bs <- BS.readFile a
      let elf  = parseElf bs
          end  = case elfData elf of
@@ -40,10 +45,9 @@ main =
 
      putStrLn "\n-- ARanges -----------\n"
 
-     case aranges ss of
-       Left err -> fail err
-       Right a  -> pPrint a
-
+     ar <- case aranges ss of
+             Left err -> fail err
+             Right a  -> pPrint a >> return a
 
      putStrLn "\n-- Info -----------\n"
 
@@ -51,8 +55,26 @@ main =
                      Nothing -> fail "Can't find debug info"
                      Just sec_bytes -> return sec_bytes
 
-     case dieFrom ss 959 of
-       Left err -> fail err
-       Right ok -> pPrint ok
+
+     case args of
+       a : _ | Just n <- readMaybe a ->
+         case findUnsegmentedAddr ar n of
+           Nothing -> putStrLn "(not found)"
+           Just off ->
+             case dieFrom ss off of
+               Left err -> fail err
+               Right die ->
+                  do putStrLn "Found in DIE:"
+                     pPrint die
+                     case lookupAT Stmt_list die of
+                       Just (Offset w) ->
+                          case L.findLineInfo ss w (\r -> L.address r >= n) of
+                            Just y -> pPrint y
+                            Nothing -> fail "Can't find"
+
+                       _ -> fail "Can't fine stmt list"
+
+       a : _ -> putStrLn ("(Failed to parse: " ++ a ++ ")")
+       [] -> putStrLn "(nothing to do)"
 
 

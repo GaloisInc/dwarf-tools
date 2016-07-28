@@ -1,26 +1,32 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 module DW.LNS where
 
-{-
-data LNS 
+import Data.Word
 
-DW_LNS_copy 0x01
-DW_LNS_advance_pc 0x02
-DW_LNS_advance_line 0x03
-DW_LNS_set_file 0x04
-DW_LNS_set_column 0x05
-DW_LNS_negate_stmt 0x06
-DW_LNS_set_basic_block 0x07
-DW_LNS_const_add_pc 0x08
-DW_LNS_fixed_advance_pc 0x09
-DW_LNS_set_prologue_end 0x0a
-DW_LNS_set_epilogue_begin 0x0b
-DW_LNS_set_isa 0x0c 
+newtype Standard = Standard Word8
 
--- extended
-DW_LNE_end_sequence 0x01
-DW_LNE_set_address 0x02
-DW_LNE_define_file 0x03
-DW_LNE_set_discriminator ‡ 0x04
-DW_LNE_lo_user 0x80
-DW_LNE_hi_user 0xff
--}
+pattern Copy                  = Standard 0x01
+pattern Advance_pc            = Standard 0x02
+pattern Advance_line          = Standard 0x03
+pattern Set_file              = Standard 0x04
+pattern Set_column            = Standard 0x05
+pattern Negate_stmt           = Standard 0x06
+pattern Set_basic_block       = Standard 0x07
+pattern Const_add_pc          = Standard 0x08
+pattern Fixed_advance_pc      = Standard 0x09
+pattern Set_prologue_end      = Standard 0x0a
+pattern Set_epilogue_begin    = Standard 0x0b
+pattern Set_isa               = Standard 0x0c
+
+
+
+newtype Extended = Extended Word8
+
+pattern End_sequence          = Extended 0x01
+pattern Set_address           = Extended 0x02
+pattern Define_file           = Extended 0x03
+pattern Set_discriminator     = Extended 0x04
+pattern Lo_user               = Extended 0x80
+pattern Hi_user               = Extended 0xff
+
