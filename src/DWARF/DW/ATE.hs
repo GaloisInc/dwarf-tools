@@ -25,7 +25,7 @@ pattern DW_ATE_edited             = DW_ATE 0x0c
 pattern DW_ATE_signed_fixed       = DW_ATE 0x0d
 pattern DW_ATE_unsigned_fixed     = DW_ATE 0x0e
 pattern DW_ATE_decimal_float      = DW_ATE 0x0f
-pattern DW_ATE_uTF                = DW_ATE 0x10
+pattern DW_ATE_UTF                = DW_ATE 0x10
 pattern DW_ATE_lo_user            = DW_ATE 0x80
 pattern DW_ATE_hi_user            = DW_ATE 0xff
 
@@ -47,7 +47,7 @@ instance Show DW_ATE where
       DW_ATE_signed_fixed      -> "DW_ATE_signed_fixed"
       DW_ATE_unsigned_fixed    -> "DW_ATE_unsigned_fixed"
       DW_ATE_decimal_float     -> "DW_ATE_decimal_float"
-      DW_ATE_uTF               -> "DW_ATE_uTF"
+      DW_ATE_UTF               -> "DW_ATE_UTF"
       DW_ATE_lo_user           -> "DW_ATE_lo_user"
       DW_ATE_hi_user           -> "DW_ATE_hi_user"
       DW_ATE w                 -> prettyHex w
