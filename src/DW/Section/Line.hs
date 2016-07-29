@@ -20,6 +20,13 @@ findLineInfo secs offset p =
     Right r -> r
   where bytes = BS.drop (fromIntegral offset) (sectionBytes ".debug_line" secs)
 
+getFile :: Sections -> Word64 -> Integer -> Either String (File ByteString)
+getFile secs offset ix = runGet (withHeader (secEndian secs) getF) bytes
+  where
+  bytes  = BS.drop (fromIntegral offset) (sectionBytes ".debug_line" secs)
+  getF h = case splitAt (fromInteger ix - 1) (file_names h) of
+             (_,b:_) -> return (resolveFile h b)
+             _       -> fail "No such file."
 
 
 data LineInfo = LineInfo Header State
@@ -36,16 +43,8 @@ opIndex (LineInfo _ s) = sOpIndex s
 file :: LineInfo -> File ByteString
 file (LineInfo h s)
   | fid < 1 = dummyFile
-  | (_,b:_) <- splitAt (fromInteger fid - 1) allFiles =
-      let dirIx = fromInteger (directory b)
-      in b { directory =
-               if dirIx == 0
-                 then "(current)"
-                 else case splitAt (dirIx-1) (include_directories h) of
-                        (_,d:_) -> d
-                        _       -> BS.empty }
+  | (_,b:_) <- splitAt (fromInteger fid - 1) allFiles = resolveFile h b
   | otherwise = dummyFile
-
   where
   fid = sFile s
   allFiles = file_names h ++ reverse (sExtraFiles s)
@@ -54,6 +53,19 @@ file (LineInfo h s)
                    , lastModified = 0
                    , fileSize     = 0
                    }
+
+resolveFile :: Header -> File Integer -> File ByteString
+resolveFile h b =
+  b { directory =
+       if dirIx == 0
+          then "(current)"
+          else case splitAt (dirIx-1) (include_directories h) of
+                 (_,d:_) -> d
+                 _       -> BS.empty
+    }
+  where
+  dirIx = fromInteger (directory b)
+
 
 line :: LineInfo -> Integer
 line (LineInfo _ s) = sLine s
@@ -236,7 +248,8 @@ specialOpCode h op s = (toLineInfo h s1, s1 { sBasicBlock    = False
 
 
 
-standardOpCode :: Endian -> Header -> Standard -> State -> Get (Maybe LineInfo,State)
+standardOpCode ::
+  Endian -> Header -> Standard -> State -> Get (Maybe LineInfo,State)
 standardOpCode endian h op s =
   case op of
     Copy -> return ( Just (toLineInfo h s)
