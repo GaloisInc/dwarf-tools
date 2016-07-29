@@ -5,7 +5,6 @@ module DWARF.DIE where
 import           Data.Serialize(Get)
 import qualified Data.Serialize as S
 import           Data.ByteString(ByteString)
-import qualified Data.ByteString as BS
 import           Data.Word
 
 import           DWARF.Basics
@@ -51,6 +50,25 @@ class DieMeta t where
   dieFormat       :: t -> DwarfFormat
   dieAddressSize  :: t -> Word8
   dieAbbr         :: t -> Integer -> Maybe Abbreviation
+
+
+{-
+-- | Decode a single DIE.  Returns 'Nothing' if the DIE is blank (a terminator).
+debugInfoEntry :: DieMeta t => t -> Get (Maybe DIE)
+debugInfoEntry meta =
+  do abbr <- uleb128
+     if abbr == 0
+       then return Nothing
+       else case dieAbbr meta abbr of
+              Just descr ->
+                do dieAttributes <- attributes meta (abbrAttrs descr)
+                   dieChildren   <- if abbrHasChildren descr
+                                       then debugInfoEntries meta
+                                       else return []
+                   return (Just DIE { dieName = abbrTag descr, .. })
+              Nothing    -> fail ("Unknown abbreviation: " ++ show abbr)
+-}
+
 
 
 -- | Decode a single DIE.  Returns 'Nothing' if the DIE is blank (a terminator).
