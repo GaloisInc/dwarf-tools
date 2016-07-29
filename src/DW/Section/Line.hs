@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, OverloadedStrings #-}
 module DW.Section.Line where
 
 import Data.Word
@@ -38,9 +38,12 @@ file (LineInfo h s)
   | fid < 1 = dummyFile
   | (_,b:_) <- splitAt (fromInteger fid - 1) allFiles =
       let dirIx = fromInteger (directory b)
-      in b { directory = case splitAt dirIx (include_directories h) of
-                           (_,d:_) -> d
-                           _       -> BS.empty }
+      in b { directory =
+               if dirIx == 0
+                 then "(current)"
+                 else case splitAt (dirIx-1) (include_directories h) of
+                        (_,d:_) -> d
+                        _       -> BS.empty }
   | otherwise = dummyFile
 
   where
@@ -81,6 +84,7 @@ instance Show LineInfo where
   show l = unlines
     [ "{ address       = " ++ prettyHex (address l)
     , ", op_ix         = " ++ show (opIndex l)
+    , ", file          = " ++ show (file l)
     , ", line          = " ++ show (line l)
     , ", column        = " ++ show (column l)
     , ", break         = " ++ show (recommendedBreak l)

@@ -15,7 +15,6 @@ import DW.Basics hiding (prettyHex)
 import DW.DIE
 import DW.AT
 import DW.Sections
-import DW.Section.Abbrev
 import DW.Section.Info
 import DW.Section.ARanges
 import qualified DW.Section.Line as L
@@ -39,9 +38,8 @@ main =
      putStrLn "Debug sections:"
      mapM_ putStrLn (Map.keys secs)
 
-     ss <- case sections end secs of
-             Left err -> fail err
-             Right a  -> return a
+     let ss = sections end secs
+
 
      putStrLn "\n-- ARanges -----------\n"
 

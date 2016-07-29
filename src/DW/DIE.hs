@@ -17,8 +17,10 @@ import           DW.TAG
 import           DW.LANG(LANG(..))
 import           DW.FORM(FORM(..))
 import qualified DW.FORM
+import           DW.ATE(ATE(..))
 import           DW.AT(AT(..))
 import qualified DW.AT
+
 
 data DIE = DIE
   { dieName       :: !TAG
@@ -42,6 +44,7 @@ data AttributeValue =
   | TypeRef   !Word64
   | String    !ByteString
   | Language  !LANG
+  | Encoding  !ATE
     deriving Show
 
 
@@ -49,6 +52,7 @@ class DieMeta t where
   dieSections     :: t -> Sections
   dieFormat       :: t -> DwarfFormat
   dieAddressSize  :: t -> Word8
+  dieAbbr         :: t -> Integer -> Maybe Abbreviation
 
 debugInfoEntryFrom ::
   DieMeta t => t -> Word64 -> ByteString -> Either String DIE
@@ -64,7 +68,7 @@ debugInfoEntry meta =
   do abbr <- uleb128
      if abbr == 0
        then return Nothing
-       else case sectionAbbr abbr (dieSections meta) of
+       else case dieAbbr meta abbr of
               Just descr ->
                 do dieAttributes <- attributes meta (abbrAttrs descr)
                    dieChildren   <- if abbrHasChildren descr
@@ -103,6 +107,7 @@ attribute meta attr form0 = special <$> val form0
   special x =
     case (attr,x) of
       (DW.AT.Language, Number n) -> Language (LANG (fromIntegral n))
+      (DW.AT.Encoding, Number n) -> Encoding (ATE (fromIntegral n))
       _ -> x
 
 

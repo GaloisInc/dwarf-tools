@@ -2,6 +2,7 @@
 module DW.Section.Info where
 
 import           Data.Map(Map)
+import qualified Data.Map as Map
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import           Data.Word
@@ -15,12 +16,14 @@ import DW.Section.Abbrev
 data Meta = Meta
   { metaHeader     :: Header
   , metaSections   :: Sections
+  , metaAbbr       :: Map Integer Abbreviation
   }
 
 instance DieMeta Meta where
   dieSections     = metaSections
   dieFormat       = format . metaHeader
   dieAddressSize  = address_size . metaHeader
+  dieAbbr m i     = Map.lookup i (metaAbbr m)
 
 data Header = Header
   { format        :: !DwarfFormat
@@ -41,8 +44,13 @@ header endian =
 getDIE :: Sections -> Get DIE
 getDIE secs =
   do hdr <- header (secEndian secs)
+     abr <- case abbrev secs (abbr_offset hdr) of
+              Left err -> fail err
+              Right a  -> return a
+
      let meta = Meta { metaHeader   = hdr
                      , metaSections = secs
+                     , metaAbbr     = abr
                      }
      mb <- debugInfoEntry meta
      case mb of

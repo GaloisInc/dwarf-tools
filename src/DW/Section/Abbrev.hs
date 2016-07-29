@@ -5,16 +5,20 @@ import           Data.Serialize(Get,runGet)
 import           Data.Map(Map)
 import qualified Data.Map as Map
 import           Data.ByteString(ByteString)
+import qualified Data.ByteString as BS
+import           Data.Word
 
 import           DW.Basics
+import           DW.Sections
 import           DW.TAG(TAG(..))
 import           DW.AT(AT(..))
 import qualified DW.AT
 import           DW.FORM(FORM(..))
 import qualified DW.FORM
 
-abbrev :: ByteString -> Either String (Map Integer Abbreviation)
-abbrev bytes = runGet abbreviations bytes
+abbrev :: Sections -> Word64 -> Either String (Map Integer Abbreviation)
+abbrev secs off = runGet abbreviations bytes
+  where bytes = BS.drop (fromIntegral off) (sectionBytes ".debug_abbrev" secs)
 
 
 data Abbreviation = Abbreviation
@@ -44,8 +48,8 @@ hasChildren :: Get Bool
 hasChildren =
   do b <- word8
      case b of
-       0x00 -> return True
-       0x01 -> return False
+       0x00 -> return False
+       0x01 -> return True
        _    -> fail ("hasChildren: " ++ show b)
 
 attributeSpecs :: Get [(AT,FORM)]
