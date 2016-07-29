@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, OverloadedStrings #-}
-module DW.Section.Line where
+module DWARF.Section.Line where
 
 import Data.Word
 import Data.Int
@@ -8,20 +8,19 @@ import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import Control.Monad(replicateM_)
 
-import DW.Basics
-import DW.Sections
-import DW.LNS
-import DW.Section.String
+import DWARF.Utils(prettyHex)
+import DWARF.Basics
+import DWARF.DW.LNS
 
 findLineInfo :: Sections -> Word64 -> (LineInfo -> Bool) -> Maybe LineInfo
 findLineInfo secs offset p =
-  case runGet (search (secEndian secs) p) bytes of
-    Left e  -> Nothing
-    Right r -> r
+  case runGet (search (sectionEndian secs) p) bytes of
+    Left _err  -> Nothing
+    Right r    -> r
   where bytes = BS.drop (fromIntegral offset) (sectionBytes ".debug_line" secs)
 
 getFile :: Sections -> Word64 -> Integer -> Either String (File ByteString)
-getFile secs offset ix = runGet (withHeader (secEndian secs) getF) bytes
+getFile secs offset ix = runGet (withHeader (sectionEndian secs) getF) bytes
   where
   bytes  = BS.drop (fromIntegral offset) (sectionBytes ".debug_line" secs)
   getF h = case splitAt (fromInteger ix - 1) (file_names h) of
@@ -210,9 +209,9 @@ opCode endian h s =
      case u of
        0 -> do bNum <- uleb128
                isolate (fromIntegral bNum)
-                 $ do op <- Extended <$> word8
+                 $ do op <- DW_LNS_Extended <$> word8
                       extendedOpCode endian h op s
-       _ | u < opcode_base h -> standardOpCode endian h (Standard u) s
+       _ | u < opcode_base h -> standardOpCode endian h (DW_LNS_Standard u) s
          | otherwise         -> let (r,s1) = specialOpCode h u s
                                 in return (Just r, s1)
 
@@ -249,16 +248,17 @@ specialOpCode h op s = (toLineInfo h s1, s1 { sBasicBlock    = False
 
 
 standardOpCode ::
-  Endian -> Header -> Standard -> State -> Get (Maybe LineInfo,State)
+  Endian -> Header -> DW_LNS_Standard -> State -> Get (Maybe LineInfo,State)
 standardOpCode endian h op s =
   case op of
-    Copy -> return ( Just (toLineInfo h s)
-                   , s { sDiscriminator = 0
-                       , sBasicBlock    = False
-                       , sPrologueEnd   = False
-                       , sEpilogueBegin = False
-                       } )
-    Advance_pc ->
+    DW_LNS_copy ->
+      return ( Just (toLineInfo h s)
+             , s { sDiscriminator = 0
+                 , sBasicBlock    = False
+                 , sPrologueEnd   = False
+                 , sEpilogueBegin = False
+                 })
+    DW_LNS_advance_pc ->
       do amt <- uleb128
          -- XXX: This looks like a bug in the standard v3 vs v4?
          -- The questoin is: should devinde by line range or not?
@@ -268,45 +268,45 @@ standardOpCode endian h op s =
                else s { sAddress = sAddress s +
                           amt * fromIntegral (minimum_instruction_length h) })
 
-    Advance_line ->
+    DW_LNS_advance_line ->
       do amt <- sleb128
          return (Nothing, s { sLine = amt + sLine s })
 
 
-    Set_file ->
+    DW_LNS_set_file ->
       do f <- uleb128
          return (Nothing, s { sFile = f })
 
-    Set_column ->
+    DW_LNS_set_column ->
       do c <- uleb128
          return (Nothing, s { sColumn = c })
 
-    Negate_stmt -> return (Nothing, s { sIsStmt = not (sIsStmt s) })
+    DW_LNS_negate_stmt -> return (Nothing, s { sIsStmt = not (sIsStmt s) })
 
-    Set_basic_block ->
+    DW_LNS_set_basic_block ->
       return (Nothing, s { sBasicBlock = True })
 
-    Const_add_pc -> return (Nothing, advanceAddress h adj s)
+    DW_LNS_const_add_pc -> return (Nothing, advanceAddress h adj s)
        where adj = fromIntegral (255 - opcode_base h)
 
-    Fixed_advance_pc ->
+    DW_LNS_fixed_advance_pc ->
       do amt <- word16 endian
          return (Nothing, s { sAddress = fromIntegral amt + sAddress s
                             , sOpIndex = 0
                              })
 
-    Set_prologue_end ->
+    DW_LNS_set_prologue_end ->
       return (Nothing, s { sPrologueEnd = True })
 
-    Set_epilogue_begin ->
+    DW_LNS_set_epilogue_begin ->
       return (Nothing, s { sEpilogueBegin = True })
 
-    Set_isa ->
-      do isa <- uleb128
-         return (Nothing, s { sISA = isa })
+    DW_LNS_set_isa ->
+      do isaVal <- uleb128
+         return (Nothing, s { sISA = isaVal })
 
     -- Unknown op-code, we just treat is a no-op; this may or may not be ok
-    Standard x
+    DW_LNS_Standard x
       | ix < BS.length (standard_opcode_lengths h) ->
         do let arity = fromIntegral (BS.index (standard_opcode_lengths h) ix)
            replicateM_ arity uleb128
@@ -317,29 +317,29 @@ standardOpCode endian h op s =
 
 
 extendedOpCode ::
-  Endian -> Header -> Extended -> State -> Get (Maybe LineInfo, State)
-extendedOpCode endian h op@(Extended zz) s =
+  Endian -> Header -> DW_LNS_Extended -> State -> Get (Maybe LineInfo, State)
+extendedOpCode endian h op s =
   case op of
 
-    End_sequence ->
+    DW_LNS_end_sequence ->
       let s1 = s { sEndSequence = True }
       in return (Just (toLineInfo h s1), initState h)
 
-    Set_address ->
+    DW_LNS_set_address ->
       do n <- remaining
          a <- unumber endian (fromIntegral n)
          return (Nothing, s { sAddress = a, sOpIndex = 0 })
 
-    Define_file ->
+    DW_LNS_define_file ->
       do f <- fileEntry
          return (Nothing, s { sExtraFiles = f : sExtraFiles s })
 
-    Set_discriminator ->
+    DW_LNS_set_discriminator ->
       do n <- uleb128
          return (Nothing, s { sDiscriminator = n })
 
     -- We treat others as no-op
-    Extended _ ->
+    DW_LNS_Extended _ ->
       do skip =<< remaining
          return (Nothing, s)
 

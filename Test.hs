@@ -11,16 +11,14 @@ import Text.Show.Pretty-- (pPrint,ppShow)
 import Hexdump
 import Text.Read(readMaybe)
 
--- import Dwarf
 
-import DW.Basics hiding (prettyHex)
-import DW.DIE
-import DW.AT
-import DW.TAG
-import DW.Sections
-import DW.Section.Info
-import DW.Section.ARanges
-import qualified DW.Section.Line as L
+import DWARF.Basics hiding (prettyHex)
+import DWARF.DIE
+import DWARF.Section.Line
+import DWARF.Section.Info
+import DWARF.Section.ARanges
+import DWARF.DW.AT
+import DWARF.DW.TAG
 
 
 main :: IO ()
@@ -53,9 +51,9 @@ main =
                      case find (containsAddr n) (dieChildren cu) of
                        Nothing -> fail "Can't find decl"
                        Just decl ->
-                         do pPrint (lookupAT Name decl)
+                         do pPrint (lookupAT DW_AT_name decl)
                             pPrint (getFileName secs cu decl)
-                            pPrint (lookupAT Decl_line decl)
+                            pPrint (lookupAT DW_AT_decl_line decl)
 
        a : _ -> putStrLn ("(Failed to parse: " ++ a ++ ")")
        [] -> putStrLn "(nothing to do)"
@@ -64,18 +62,18 @@ main =
 containsAddr :: Integer -> DIE -> Bool
 containsAddr tgt d =
   case dieName d of
-    Subprogram ->
-      case (lookupAT Low_pc d, lookupAT High_pc d) of
+    DW_TAG_subprogram ->
+      case (lookupAT DW_AT_low_pc d, lookupAT DW_AT_high_pc d) of
         (Just (Address a), Just (Number sz)) ->  tgt >= a && tgt < a + sz
         _ -> False
     _ -> False
 
 
-getFileName :: Sections -> DIE -> DIE -> Maybe (L.File ByteString)
+getFileName :: Sections -> DIE -> DIE -> Maybe (File ByteString)
 getFileName secs cu decl =
-  do Offset w <- lookupAT Stmt_list cu
-     Number f <- lookupAT Decl_file decl
-     case L.getFile secs w f of
+  do Offset w <- lookupAT DW_AT_stmt_list cu
+     Number f <- lookupAT DW_AT_decl_file decl
+     case getFile secs w f of
        Left _ -> Nothing
        Right f -> Just f
 

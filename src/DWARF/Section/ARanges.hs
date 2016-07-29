@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module DW.Section.ARanges
+module DWARF.Section.ARanges
   ( findUnsegmentedAddr
   , FindAddress(..)
   , Entry(..)
@@ -8,14 +8,11 @@ module DW.Section.ARanges
   ) where
 
 import           Data.Serialize.Get(Get,runGet,skip)
-import           Data.Word
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import           Data.Word(Word8,Word16,Word64)
 import           Control.Applicative(many)
 import           Control.Monad(msum)
 
-import DW.Basics
-import DW.Sections
+import DWARF.Basics
 
 class FindAddress t where
   findAddress :: t -> Integer -> Integer -> Maybe Word64
@@ -43,7 +40,7 @@ newtype ARanges = ARanges [([Entry], Word64)]
 
 aranges :: Sections -> Either String ARanges
 aranges secs = fmap ARanges
-             $ runGet (entrySets (secEndian secs))
+             $ runGet (entrySets (sectionEndian secs))
              $ sectionBytes ".debug_aranges" secs
 
 entrySets :: Endian -> Get [ ([Entry], Word64) ]

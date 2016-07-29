@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module DW.Section.Info where
+module DWARF.Section.Info where
 
 import           Data.Map(Map)
 import qualified Data.Map as Map
@@ -8,10 +8,9 @@ import qualified Data.ByteString as BS
 import           Data.Word
 import           Data.Serialize
 
-import DW.Basics
-import DW.DIE
-import DW.Sections
-import DW.Section.Abbrev
+import DWARF.Basics
+import DWARF.DIE
+import DWARF.Section.Abbrev
 
 data Meta = Meta
   { metaHeader     :: Header
@@ -43,7 +42,7 @@ header endian =
 
 getDIE :: Sections -> Get DIE
 getDIE secs =
-  do hdr <- header (secEndian secs)
+  do hdr <- header (sectionEndian secs)
      abr <- case abbrev secs (abbr_offset hdr) of
               Left err -> fail err
               Right a  -> return a
