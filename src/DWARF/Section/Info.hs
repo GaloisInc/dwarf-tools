@@ -3,7 +3,6 @@ module DWARF.Section.Info where
 
 import           Data.Map(Map)
 import qualified Data.Map as Map
-import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import           Data.Word
 import           Data.Serialize
@@ -12,17 +11,22 @@ import DWARF.Basics
 import DWARF.DIE
 import DWARF.Section.Abbrev
 
-data Meta = Meta
-  { metaHeader     :: Header
-  , metaSections   :: Sections
-  , metaAbbr       :: Map Integer Abbreviation
+data CU = CU
+  { cuHeader     :: Header
+  , cuSections   :: Sections
+  , cuAbbr       :: Map Integer Abbreviation
+  , cuOurOffset  :: !Word64
+    -- ^ Our offset in 'debug_info', used to resolve local refs
   }
 
-instance DieMeta Meta where
-  dieSections     = metaSections
-  dieFormat       = format . metaHeader
-  dieAddressSize  = address_size . metaHeader
-  dieAbbr m i     = Map.lookup i (metaAbbr m)
+instance HasDIE CU where
+  dieSections       = cuSections
+  dieFormat         = format . cuHeader
+  dieAddressSize    = address_size . cuHeader
+  dieAbbr m i       = Map.lookup i (cuAbbr m)
+  dieLocaslBytes CU { .. } n
+    = BS.drop (fromIntegral (cuOurOffset + n))
+        (sectionBytes ".debug_info" cuSections)
 
 data Header = Header
   { format        :: !DwarfFormat
@@ -40,25 +44,31 @@ header endian =
      address_size  <- word8
      return Header { .. }
 
-getDIE :: Sections -> Get DIE
-getDIE secs =
+
+
+-- | Get the compilation unit ath the given offset.
+getCU :: Sections -> Word64 -> Either String (CU,DIE)
+getCU secs offset = flip runGet start $
   do hdr <- header (sectionEndian secs)
      abr <- case abbrev secs (abbr_offset hdr) of
               Left err -> fail err
               Right a  -> return a
 
-     let meta = Meta { metaHeader   = hdr
-                     , metaSections = secs
-                     , metaAbbr     = abr
-                     }
-     mb <- debugInfoEntry meta
+     let cu = CU { cuHeader     = hdr
+                 , cuSections   = secs
+                 , cuAbbr       = abr
+                 , cuOurOffset  = offset
+                 }
+     mb <- getDIE cu
      case mb of
        Nothing -> fail "(No debug info entry)"
-       Just die -> return die
+       Just die -> return (cu, die)
+  where
+  debug_info = sectionBytes ".debug_info" secs
+  start      = BS.drop (fromIntegral offset) debug_info
 
-dieFrom :: Sections -> Word64 -> Either String DIE
-dieFrom secs offset = runGet (getDIE secs)
-                    $ BS.drop (fromIntegral offset)
-                    $ sectionBytes ".debug_info" secs
+
+
+
 
 

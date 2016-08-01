@@ -3,16 +3,15 @@ import qualified Data.Map as Map
 import Data.List(isPrefixOf)
 import Data.Elf
 import Data.List(find)
+import Data.Maybe(maybeToList)
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import System.Environment
-import qualified Data.Serialize as S
 import Text.Show.Pretty-- (pPrint,ppShow)
-import Hexdump
 import Text.Read(readMaybe)
 
 
-import DWARF.Basics hiding (prettyHex)
+import DWARF.Basics
 import DWARF.DIE
 import DWARF.Section.Line
 import DWARF.Section.Info
@@ -43,17 +42,20 @@ main =
          case findUnsegmentedAddr secs n of
            Nothing -> putStrLn "(not found)"
            Just off ->
-             case dieFrom secs off of
+             case getCU secs off of
                Left err -> fail err
-               Right cu ->
+               Right (cu,die) ->
                   do putStrLn "Found CU"
-                     -- pPrint cu
-                     case find (containsAddr n) (dieChildren cu) of
-                       Nothing -> fail "Can't find decl"
-                       Just decl ->
-                         do pPrint (lookupAT DW_AT_name decl)
-                            pPrint (getFileName secs cu decl)
-                            pPrint (lookupAT DW_AT_decl_line decl)
+                     case loadChildren cu die of
+                       Left err -> fail err
+                       Right a ->
+                         do let Right cs = dieChildren a
+                            case find (containsAddr n) cs of
+                              Nothing -> fail "Can't find decl"
+                              Just decl ->
+                                do pPrint (lookupAT DW_AT_name decl)
+                                   pPrint (getFileName secs die decl)
+                                   pPrint (lookupAT DW_AT_decl_line decl)
 
        a : _ -> putStrLn ("(Failed to parse: " ++ a ++ ")")
        [] -> putStrLn "(nothing to do)"
