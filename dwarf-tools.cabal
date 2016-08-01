@@ -1,7 +1,8 @@
-name:                gwarf
+name:                dwarf-tools
 version:             0.1.0.0
--- synopsis:
--- description:
+synopsis:            Tools for working with the DWARF debugging format.
+description:         This library provides tools for working with the
+                     information stored in the DWARF sections of an object file.
 license:             MIT
 license-file:        LICENSE
 author:              Iavor S. Diatchki
@@ -42,7 +43,8 @@ library
 
 executable findAddr
   main-is:          Test.hs
-  build-depends:    base, gwarf, bytestring,cereal,elf, containers, pretty-show,
+  build-depends:    base, dwarf-tools, bytestring,cereal,elf, containers,
+                    pretty-show,
                     pretty-hex
   default-language: Haskell2010
 
