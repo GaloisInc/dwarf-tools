@@ -3,7 +3,7 @@ version:             0.1.0.0
 synopsis:            Tools for working with the DWARF debugging format.
 description:         This library provides tools for working with the
                      information stored in the DWARF sections of an object file.
-license:             MIT
+license:             ISC
 license-file:        LICENSE
 author:              Iavor S. Diatchki
 maintainer:          iavor.diatchki@gmail.com
@@ -28,7 +28,9 @@ library
                        DWARF.DW.AT,
                        DWARF.DW.DS,
                        DWARF.DW.LANG,
-                       DWARF.DW.LNS
+                       DWARF.DW.LNS,
+
+                       DWARF.Addr2Line
 
   other-modules:       DWARF.Utils
 
