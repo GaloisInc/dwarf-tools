@@ -25,7 +25,14 @@ addr2line secs n =
      (cu,die) <- fromEither (getCU secs off)
      die'     <- fromEither (loadChildren cu die)
      chi      <- fromEither (dieChildren die')
-     decl     <- find (containsAddr n) chi
+     decl0    <- find (containsAddr n) chi
+     decl     <- case lookupAT DW_AT_specification decl0 of
+                   Just (LocalRef r) ->
+                     case getLocalDIE cu r of
+                       Left err -> return decl0
+                       Right d  -> return d
+                   _ -> return decl0
+
      return Info { function = do String n <- lookupAT DW_AT_name decl
                                  return n
                  , file     = getFileName secs die decl

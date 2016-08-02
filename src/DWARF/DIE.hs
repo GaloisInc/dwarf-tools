@@ -88,6 +88,13 @@ getDIE meta =
                    return (Just DIE { dieName = abbrTag descr, .. })
               Nothing    -> fail ("Unknown abbreviation: " ++ show abbr)
 
+getLocalDIE :: HasDIE t => t -> Word64 -> Either String DIE
+getLocalDIE cu off =
+  case getDieBS cu (dieLocaslBytes cu off) of
+    Left err          -> Left err
+    Right (Just a,_)  -> Right a
+    Right (Nothing,_) -> Left "(no such die)"
+
 getDieBS :: HasDIE t => t -> ByteString -> Either String (Maybe DIE,ByteString)
 getDieBS meta bs = S.runGetState (getDIE meta) bs 0
 
