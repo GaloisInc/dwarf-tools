@@ -3,6 +3,7 @@ module DWARF.Addr2Line where
 import Data.ByteString(ByteString)
 import Data.Maybe(fromMaybe)
 import Data.List(find)
+import Data.Word(Word64)
 
 import DWARF.Basics
 import DWARF.DIE
@@ -26,12 +27,7 @@ addr2line secs n =
      die'     <- fromEither (loadChildren cu die)
      chi      <- fromEither (dieChildren die')
      decl0    <- find (containsAddr n) chi
-     decl     <- case lookupAT DW_AT_specification decl0 of
-                   Just (LocalRef r) ->
-                     case getLocalDIE cu r of
-                       Left err -> return decl0
-                       Right d  -> return d
-                   _ -> return decl0
+     decl     <- fromEither (resovleIndirections cu decl0)
 
      return Info { function = do String n <- lookupAT DW_AT_name decl
                                  return n
@@ -43,6 +39,14 @@ addr2line secs n =
 fromEither :: Either a b -> Maybe b
 fromEither (Left _)  = Nothing
 fromEither (Right a) = Just a
+
+resovleIndirections :: CU -> DIE -> Either String DIE
+resovleIndirections cu d
+  | Just (LocalRef r) <- lookupAT DW_AT_specification d =
+      resovleIndirections cu =<< getLocalDIE cu r
+  | Just (LocalRef r) <- lookupAT DW_AT_abstract_origin d =
+      resovleIndirections cu =<< getLocalDIE cu r
+  | otherwise = Right d
 
 
 containsAddr :: Integer -> DIE -> Bool
