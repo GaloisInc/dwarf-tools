@@ -29,6 +29,7 @@ library
                        DWARF.DW.DS,
                        DWARF.DW.LANG,
                        DWARF.DW.LNS,
+                       DWARF.DW.INL,
 
                        DWARF.Addr2Line
 

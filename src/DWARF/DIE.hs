@@ -16,6 +16,7 @@ import           DWARF.DW.LANG
 import           DWARF.DW.FORM
 import           DWARF.DW.ATE
 import           DWARF.DW.AT
+import           DWARF.DW.INL
 
 
 data DIE = DIE
@@ -53,6 +54,7 @@ data AttributeValue =
   | String    !ByteString
   | Language  !DW_LANG
   | Encoding  !DW_ATE
+  | Inline    !DW_INL
     deriving Show
 
 
@@ -138,6 +140,7 @@ attribute meta attr form0 = special <$> val form0
     case (attr,x) of
       (DW_AT_language, Number n) -> Language (DW_LANG (fromIntegral n))
       (DW_AT_encoding, Number n) -> Encoding (DW_ATE  (fromIntegral n))
+      (DW_AT_inline,   Number n) -> Inline (DW_INL (fromIntegral n))
       _ -> x
 
 
