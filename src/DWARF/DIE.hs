@@ -70,6 +70,15 @@ class HasDIE t where
   -- (i.e., it will likely contain *more* than the local entry)
 
 
+-- | Load all the DIE's children and their children's children, etc.
+loadChildrenDeep :: HasDIE t => t -> DIE -> Either String DIE
+loadChildrenDeep meta d =
+  do d' <- loadChildren meta d
+     let Right cs = dieChildren d'
+     cs' <- mapM (loadChildrenDeep meta) cs
+     return d' { dieChildren = Right cs' }
+
+
 -- | Decode a single DIE, without processing its children.
 -- Returns 'Nothing' if the DIE is blank (a terminator).
 getDIE :: HasDIE t => t -> Get (Maybe DIE)
@@ -88,6 +97,8 @@ getDIE meta =
                    return (Just DIE { dieName = abbrTag descr, .. })
               Nothing    -> fail ("Unknown abbreviation: " ++ show abbr)
 
+-- | Resolve a local reference.  The offset is relative to the
+-- beginning of the current compilation unit.
 getLocalDIE :: HasDIE t => t -> Word64 -> Either String DIE
 getLocalDIE cu off =
   case getDieBS cu (dieLocaslBytes cu off) of
