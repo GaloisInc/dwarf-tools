@@ -22,11 +22,41 @@ import           DWARF.DW.INL
 data DIE = DIE
   { dieName       :: !DW_TAG
   , dieAttributes :: ![(DW_AT,AttributeValue)]
-  , dieChildren   :: !(Either BS [DIE])
-    -- ^ 'Right' if the children are decoded, 'Left' if not.
-    -- The bytestring contains the encoded children and more,
-    -- last child is a 0 entry.
+  , dieChildren   :: Children  -- It is important that this is lazy!
   } deriving Show
+
+data Children = NoChildren
+              | ChildError String
+              | Child DIE Children
+
+instance Show Children where
+  showsPrec p cs = showChar '[' . show1 cs . showChar ']'
+    where
+    showERR txt = showString "ERROR " . shows txt
+
+    show1 NoChildren       = id
+    show1 (ChildError err) = showERR err
+    show1 (Child d more)   = shows d . show2 more
+
+    show2 NoChildren       = id
+    show2 x                = showString ", " . show1 x
+
+
+-- | Check if the children contain an error
+badChildren :: Children -> Maybe String
+badChildren chi =
+  case chi of
+    NoChildren      -> Nothing
+    ChildError err  -> Just err
+    Child _ cs      -> badChildren cs
+
+findChild :: (DIE -> Bool) -> Children -> Either String (Maybe DIE)
+findChild p chi =
+  case chi of
+    NoChildren     -> Right Nothing
+    ChildError err -> Left err
+    Child d more   -> if p d then Right (Just d) else findChild p more
+
 
 newtype BS = BS ByteString
 
@@ -64,77 +94,86 @@ class HasDIE t where
   dieFormat       :: t -> DwarfFormat
   dieAddressSize  :: t -> Word8
   dieAbbr         :: t -> Integer -> Maybe Abbreviation
-  dieLocaslBytes  :: t -> Word64 -> ByteString
+  dieLocallBytes  :: t -> Word64 -> ByteString
   -- ^ Get the bytes for local reference.
   -- We DON'T assume anythong about the size of the bytestring
   -- (i.e., it will likely contain *more* than the local entry)
 
 
--- | Load all the DIE's children and their children's children, etc.
-loadChildrenDeep :: HasDIE t => t -> DIE -> Either String DIE
-loadChildrenDeep meta d =
-  do d' <- loadChildren meta d
-     let Right cs = dieChildren d'
-     cs' <- mapM (loadChildrenDeep meta) cs
-     return d' { dieChildren = Right cs' }
 
 
--- | Decode a single DIE, without processing its children.
--- Returns 'Nothing' if the DIE is blank (a terminator).
-getDIE :: HasDIE t => t -> Get (Maybe DIE)
-getDIE meta =
-  do abbr <- uleb128
-     if abbr == 0
-       then return Nothing
-       else case dieAbbr meta abbr of
-              Just descr ->
-                do dieAttributes <- attributes meta (abbrAttrs descr)
-                   dieChildren <-
-                     if abbrHasChildren descr
-                        then (Left . BS) <$>
-                                    S.lookAhead (S.getBytes =<< S.remaining)
-                        else return (Right [])
-                   return (Just DIE { dieName = abbrTag descr, .. })
-              Nothing    -> fail ("Unknown abbreviation: " ++ show abbr)
-
--- | Resolve a local reference.  The offset is relative to the
--- beginning of the current compilation unit.
-getLocalDIE :: HasDIE t => t -> Word64 -> Either String DIE
-getLocalDIE cu off =
-  case getDieBS cu (dieLocaslBytes cu off) of
-    Left err          -> Left err
-    Right (Just a,_)  -> Right a
-    Right (Nothing,_) -> Left "(no such die)"
-
-getDieBS :: HasDIE t => t -> ByteString -> Either String (Maybe DIE,ByteString)
-getDieBS meta bs = S.runGetState (getDIE meta) bs 0
-
-
-
--- | Decode a sequence of DIEs.  Tries to follow sibling pointers, if available.
-debugInfoEntries :: HasDIE t => t -> ByteString -> Either String [DIE]
-debugInfoEntries meta = go []
+-- | Decode the outline of a DIE.
+bsDIE :: HasDIE cu =>
+         cu ->
+         ByteString ->
+         Either String
+                (Maybe (DW_TAG,Bool,[(DW_AT,AttributeValue)]), ByteString)
+bsDIE cu bytes = S.runGetState die bytes 0
   where
-  go as bytes =
-    case getDieBS meta bytes of
-      Left err -> Left err
-      Right (mb,more) ->
-        case mb of
-          Nothing -> Right (reverse as)
-          Just a ->
-            case lookupAT DW_AT_sibling a of
-              Just (LocalRef n) -> go (a : as) (dieLocaslBytes meta n)
-              _  -> go (a : as) more
+  die = do abbr <- uleb128
+           if abbr == 0
+              then return Nothing
+              else case dieAbbr cu abbr of
+                     Nothing -> fail ("Unknown abbrevation: " ++ show abbr)
+                     Just descr ->
+                       do dieAttributes <- attributes cu (abbrAttrs descr)
+                          return (Just ( abbrTag descr
+                                       , abbrHasChildren descr
+                                       , dieAttributes
+                                       ))
 
--- | Load one level of children. The `dieChildren` filed should contina `Right`
-loadChildren :: HasDIE t => t -> DIE -> Either String DIE
-loadChildren meta d =
-  case dieChildren d of
-    Right _ -> Right d
-    Left (BS bs) ->
-      case debugInfoEntries meta bs of
-        Left err -> Left err
-        Right cs -> Right d { dieChildren = Right cs }
+-- | Decode children lazyily.
+lazyChildren :: HasDIE cu => cu -> ByteString -> Children
+lazyChildren cu = fst . go
+  where
+  go bytes =
+    case bsDIE cu bytes of
+      Left err      -> (ChildError err, error "[BUG] lazyByteChildren")
+      Right (mb,rest) ->
+        case mb of
+          Nothing -> (NoChildren, rest)
+          Just (tag,childs,attrs) ->
+            let (ourChildren,afterOurChildren)
+                  | childs    = go rest
+                  | otherwise = (NoChildren, rest)
+
+                d = DIE { dieName       = tag
+                        , dieAttributes = attrs
+                        , dieChildren   = ourChildren
+                        }
+                (otherChildren,next) =
+                   case lookup DW_AT_sibling attrs of
+                     Just (LocalRef off) -> go (dieLocallBytes cu off)
+                     Nothing ->
+                       case badChildren ourChildren of
+                         Just err -> (ChildError err,afterOurChildren)
+                         Nothing  -> go afterOurChildren
+            in (Child d otherChildren,next)
+
+
+decodeDIE :: HasDIE cu => cu -> ByteString -> Either String DIE
+decodeDIE cu bs =
+  do (mb,rest) <- bsDIE cu bs
+     case mb of
+       Nothing -> Left "(no die)"
+
+       -- We check for children first, so if there are none we don't hold to BS
+       Just (tag,hasChildren,attr)
+         | hasChildren ->
+            Right DIE { dieName       = tag
+                      , dieAttributes = attr
+                      , dieChildren   = lazyChildren cu rest
+                      }
+         | otherwise -> Right DIE { dieName       = tag
+                                  , dieAttributes = attr
+                                  , dieChildren   = NoChildren
+                                  }
+
+
+getLocalDIE :: HasDIE t => t -> Word64 -> Either String DIE
+getLocalDIE cu off = decodeDIE cu (dieLocallBytes cu off)
+
+
 
 
 -- | Decode a list of attributes.

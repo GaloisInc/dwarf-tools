@@ -24,7 +24,7 @@ instance HasDIE CU where
   dieFormat         = format . cuHeader
   dieAddressSize    = address_size . cuHeader
   dieAbbr m i       = Map.lookup i (cuAbbr m)
-  dieLocaslBytes CU { .. } n
+  dieLocallBytes CU { .. } n
     = BS.drop (fromIntegral (cuOurOffset + n))
         (sectionBytes ".debug_info" cuSections)
 
@@ -48,26 +48,25 @@ header endian =
 
 -- | Get the compilation unit ath the given offset.
 getCU :: Sections -> Word64 -> Either String (CU,DIE)
-getCU secs offset = flip runGet start $
-  do hdr <- header (sectionEndian secs)
-     abr <- case abbrev secs (abbr_offset hdr) of
-              Left err -> fail err
-              Right a  -> return a
-
-     let cu = CU { cuHeader     = hdr
-                 , cuSections   = secs
-                 , cuAbbr       = abr
-                 , cuOurOffset  = offset
-                 }
-     mb <- getDIE cu
-     case mb of
-       Nothing -> fail "(No debug info entry)"
-       Just die -> return (cu, die)
+getCU secs offset =
+  do (cu,rest) <- runGetState theCU start 0
+     die       <- decodeDIE cu rest
+     return (cu,die)
   where
   debug_info = sectionBytes ".debug_info" secs
   start      = BS.drop (fromIntegral offset) debug_info
 
 
+  theCU = do hdr <- header (sectionEndian secs)
+             abr <- case abbrev secs (abbr_offset hdr) of
+                      Left err -> fail err
+                      Right a  -> return a
+
+             return CU { cuHeader     = hdr
+                       , cuSections   = secs
+                       , cuAbbr       = abr
+                       , cuOurOffset  = offset
+                       }
 
 
 

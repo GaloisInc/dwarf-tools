@@ -1,9 +1,9 @@
-module DWARF.Addr2Line where
-
+module DWARF.Addr2Line where 
 import Data.ByteString(ByteString)
 import Data.Maybe(fromMaybe)
 import Data.List(find)
 import Data.Word(Word64)
+import Control.Monad(join)
 
 import DWARF.Basics
 import DWARF.DIE
@@ -24,9 +24,8 @@ addr2line secs n =
   fromMaybe Info { function = Nothing, file = Nothing, line = Nothing } $
   do off      <- findUnsegmentedAddr secs n
      (cu,die) <- fromEither (getCU secs off)
-     die'     <- fromEither (loadChildren cu die)
-     chi      <- fromEither (dieChildren die')
-     decl0    <- find (containsAddr n) chi
+     decl0    <- join $ fromEither
+                      $ findChild (containsAddr n) (dieChildren die)
      decl     <- fromEither (resovleIndirections cu decl0)
 
      return Info { function = do String n <- lookupAT DW_AT_name decl
@@ -55,7 +54,8 @@ containsAddr tgt d =
     DW_TAG_subprogram ->
       case (lookupAT DW_AT_low_pc d, lookupAT DW_AT_high_pc d) of
         (Just (Address a), Just (Number sz)) ->  tgt >= a && tgt < a + sz
-        _ -> False
+        (Just (Address a), Just (Address b)) ->  tgt >= a && tgt < b
+        _ ->  False
     _ -> False
 
 
