@@ -9,7 +9,8 @@ import DWARF.Basics
 import DWARF.DIE
 import DWARF.Section.ARanges
 import DWARF.Section.Info
-import DWARF.Section.Line(getFile,File)
+import DWARF.Section.Line(File)
+import qualified DWARF.Section.Line as L
 import DWARF.DW.TAG
 import DWARF.DW.AT
 
@@ -28,11 +29,12 @@ addr2line secs n =
                       $ findChild (containsAddr n) (dieChildren die)
      decl     <- fromEither (resovleIndirections cu decl0)
 
+     let mb = getFileNameAndLine secs die decl n
+
      return Info { function = do String n <- lookupAT DW_AT_name decl
                                  return n
-                 , file     = getFileName secs die decl
-                 , line     = do Number n <- lookupAT DW_AT_decl_line decl
-                                 return n
+                 , file     = fst <$> mb
+                 , line     = snd <$> mb
                  }
 
 fromEither :: Either a b -> Maybe b
@@ -59,11 +61,15 @@ containsAddr tgt d =
     _ -> False
 
 
-getFileName :: Sections -> DIE -> DIE -> Maybe (File ByteString)
-getFileName secs cu decl =
+getFileNameAndLine :: Sections -> DIE -> DIE -> Integer ->
+    Maybe (File ByteString, Integer)
+getFileNameAndLine secs cu decl addr =
   do Offset w <- lookupAT DW_AT_stmt_list cu
-     Number f <- lookupAT DW_AT_decl_file decl
-     case getFile secs w f of
-       Left _ -> Nothing
-       Right f -> Just f
+     info <- L.findLineInfo secs w (\info -> L.address info >= addr)
+     return (L.file info, L.line info)
+
+
+
+
+
 
